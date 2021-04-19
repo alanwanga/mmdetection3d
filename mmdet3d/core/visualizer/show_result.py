@@ -37,33 +37,43 @@ def _write_oriented_bbox(scene_bbox, out_filename):
         out_filename(str): Filename.
     """
 
-    def heading2rotmat(heading_angle):
-        rotmat = np.zeros((3, 3))
-        rotmat[2, 2] = 1
-        cosval = np.cos(heading_angle)
-        sinval = np.sin(heading_angle)
-        rotmat[0:2, 0:2] = np.array([[cosval, -sinval], [sinval, cosval]])
-        return rotmat
+    # def heading2rotmat(heading_angle):
+    #     rotmat = np.zeros((3, 3))
+    #     rotmat[2, 2] = 1
+    #     cosval = np.cos(heading_angle)
+    #     sinval = np.sin(heading_angle)
+    #     rotmat[0:2, 0:2] = np.array([[cosval, -sinval], [sinval, cosval]])
+    #     return rotmat
 
-    def convert_oriented_box_to_trimesh_fmt(box):
-        ctr = box[:3]
-        lengths = box[3:6]
-        trns = np.eye(4)
-        trns[0:3, 3] = ctr
-        trns[3, 3] = 1.0
-        trns[0:3, 0:3] = heading2rotmat(box[6])
-        box_trimesh_fmt = trimesh.creation.box(lengths, trns)
-        return box_trimesh_fmt
+    # def convert_oriented_box_to_trimesh_fmt(box):
+    #     ctr = box[:3]
+    #     lengths = box[3:6]
+    #     trns = np.eye(4)
+    #     trns[0:3, 3] = ctr
+    #     trns[3, 3] = 1.0
+    #     trns[0:3, 0:3] = heading2rotmat(box[6])
+    #     box_trimesh_fmt = trimesh.creation.box(lengths, trns)
+    #     return box_trimesh_fmt
+
+    # if len(scene_bbox) == 0:
+    #     scene_bbox = np.zeros((1, 7))
+    # scene = trimesh.scene.Scene()
+    # for box in scene_bbox:
+    #     scene.add_geometry(convert_oriented_box_to_trimesh_fmt(box))
+
+    # mesh_list = trimesh.util.concatenate(scene.dump())
+    # # save to obj file
+    # trimesh.io.export.export_mesh(mesh_list, out_filename, file_type='obj')
 
     if len(scene_bbox) == 0:
         scene_bbox = np.zeros((1, 7))
-    scene = trimesh.scene.Scene()
+    
+    fout = open(out_filename, 'w')
     for box in scene_bbox:
-        scene.add_geometry(convert_oriented_box_to_trimesh_fmt(box))
-
-    mesh_list = trimesh.util.concatenate(scene.dump())
-    # save to obj file
-    trimesh.io.export.export_mesh(mesh_list, out_filename, file_type='obj')
+        fout.write(
+                '%f %f %f %f %f %f %f\n' %
+                (box[0], box[1], box[2], box[3], box[4], box[5], box[6]))
+    fout.close()
 
     return
 
