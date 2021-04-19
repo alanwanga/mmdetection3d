@@ -92,7 +92,7 @@ def _write_oriented_bbox(scene_bbox, out_filename):
 
         label['frames'].append(frame)
 
-    with open(out_filename,, 'w') as outfile:
+    with open(out_filename, 'w') as outfile:
         json.dump(label, outfile, indent=4)
 
     label['threshold'] = { 'position': 1, 'rotation': 1, 'dimension': 1 }
