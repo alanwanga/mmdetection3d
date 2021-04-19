@@ -1,5 +1,6 @@
 import json
 import uuid
+import math
 import mmcv
 import numpy as np
 import trimesh
@@ -83,9 +84,9 @@ def _write_oriented_bbox(scene_bbox, out_filename):
             item = {}
             item['id'] = str(uuid.uuid1())
             item['category'] = 'Car'
-            item['position'] = { 'x': float(box[0]), 'y': float(box[1]), 'z': float(box[2])}
+            item['position'] = { 'x': float(box[1]), 'y': -float(box[0]), 'z': float(box[2])}
             item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5])}
-            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) }
+            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) - math.pi / 2 }
             item['locked'] = None
             item['interpolated'] = False
             item['labels'] = None
