@@ -1,4 +1,5 @@
 import json
+import uuid
 import mmcv
 import numpy as np
 import trimesh
