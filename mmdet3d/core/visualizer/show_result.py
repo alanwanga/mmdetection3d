@@ -85,7 +85,7 @@ def _write_oriented_bbox(scene_bbox, out_filename):
             item['category'] = 'Car'
             item['position'] = { 'x': float(box[0]), 'y': float(box[1]), 'z': float(box[2])}
             item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5])}
-            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) }
+            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) * -1 }
             item['locked'] = None
             item['interpolated'] = False
             item['labels'] = None
