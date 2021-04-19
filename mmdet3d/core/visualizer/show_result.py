@@ -1,3 +1,4 @@
+import json
 import mmcv
 import numpy as np
 import trimesh
@@ -65,15 +66,38 @@ def _write_oriented_bbox(scene_bbox, out_filename):
     # # save to obj file
     # trimesh.io.export.export_mesh(mesh_list, out_filename, file_type='obj')
 
-    if len(scene_bbox) == 0:
-        scene_bbox = np.zeros((1, 7))
-    
-    fout = open(out_filename, 'w')
-    for box in scene_bbox:
-        fout.write(
-                '%f %f %f %f %f %f %f\n' %
-                (box[0], box[1], box[2], box[3], box[4], box[5], box[6]))
-    fout.close()
+    label = {}
+    label['baseUrl'] = ''
+    label['frames'] = []
+
+    for frameId in range(1):
+        frame = {}
+        frame['frameId'] = 0
+        frame['items'] = []
+
+        if len(scene_bbox) == 0:
+            scene_bbox = np.zeros((1, 7))
+        
+        for box in scene_bbox:
+            item = {}
+            item['id'] = str(uuid.uuid1())
+            item['category'] = 'Car'
+            item['position'] = { 'x': float(box[0]), 'y': float(box[1]), 'z': float(box[2])}
+            item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5])}
+            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) }
+            item['locked'] = None
+            item['interpolated'] = False
+            item['labels'] = None
+            frame['items'].append(item)
+
+        label['frames'].append(frame)
+
+    with open(out_filename,, 'w') as outfile:
+        json.dump(label, outfile, indent=4)
+
+    label['threshold'] = { 'position': 1, 'rotation': 1, 'dimension': 1 }
+    with open(out_filename.replace('.json', '.bk.json'), 'w') as outfile:
+        json.dump(label, outfile, indent=4)
 
     return
 
@@ -111,7 +135,7 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True):
         # the positive direction for yaw in meshlab is clockwise
         gt_bboxes[:, 6] *= -1
         _write_oriented_bbox(gt_bboxes,
-                             osp.join(result_path, f'{filename}_gt.obj'))
+                             osp.join(result_path, f'{filename}_gt.json'))
 
     if pred_bboxes is not None:
         # bottom center to gravity center
@@ -119,7 +143,7 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True):
         # the positive direction for yaw in meshlab is clockwise
         pred_bboxes[:, 6] *= -1
         _write_oriented_bbox(pred_bboxes,
-                             osp.join(result_path, f'{filename}_pred.obj'))
+                             osp.join(result_path, f'{filename}_pred.json'))
 
 
 def show_seg_result(points,
