@@ -36,7 +36,7 @@ conda activate open-mmlab
 **b. Install PyTorch and torchvision following the [official instructions](https://pytorch.org/).**
 
 ```shell
-~~conda install pytorch torchvision -c pytorch~~
+# conda install pytorch torchvision -c pytorch
 ```
 
 Note: Make sure that your compilation CUDA version and runtime CUDA version match.
@@ -53,7 +53,7 @@ conda install pytorch==1.5.0 cudatoolkit=10.1 torchvision==0.6.0 -c pytorch
 PyTorch 1.3.1., you need to install the prebuilt PyTorch with CUDA 9.2.
 
 ```python
-~~conda install pytorch=1.3.1 cudatoolkit=9.2 torchvision=0.4.2 -c pytorch~~
+# conda install pytorch=1.3.1 cudatoolkit=9.2 torchvision=0.4.2 -c pytorch
 ```
 
 If you build PyTorch from source instead of installing the prebuilt pacakge,
@@ -164,7 +164,7 @@ conda create -n open-mmlab python=3.7 -y
 conda activate open-mmlab
 
 # install latest pytorch prebuilt with the default prebuilt CUDA version (usually the latest)
-~~conda install -c pytorch pytorch torchvision -y~~
+# conda install -c pytorch pytorch torchvision -y
 conda install pytorch==1.5.0 cudatoolkit=10.1 torchvision==0.6.0 -c pytorch
 
 # install mmcv
