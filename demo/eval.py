@@ -2,6 +2,7 @@ from scipy.spatial.transform import Rotation as R
 import itertools
 
 import argparse
+import os
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -348,7 +349,7 @@ def get_class_names(gt: dict) -> list:
     return sorted(list(set([x["name"] for x in gt])))
 
 
-def build_scene(file: str, index=None) -> list:
+def build_scene(file: str, score_thres=0.0, index=None, frameId=None) -> list:
     scene = []
     with open(file) as f:
         data = json.load(f)
@@ -359,8 +360,13 @@ def build_scene(file: str, index=None) -> list:
             if index is not None and frame['frameId'] > index:
                 continue
             for o in frame['items']:
+                if 'score' in o and o['score'] < score_thres:
+                    continue
                 item = {}
-                item['sample_token'] = str(frame['frameId'])
+                if frameId is not None:
+                    item['sample_token'] = str(frameId)
+                else:
+                    item['sample_token'] = str(frame['frameId'])
                 item['translation'] = [o['position']['x'],
                                        o['position']['y'], o['position']['z']]
                 item['size'] = [o['dimension']['x'],
@@ -381,6 +387,8 @@ def parse_args():
         description='eval a model')
     # parser.add_argument('--gt_file', type=str, default='/Users/yangxiaorui/Downloads/anno_frame_6000_6150.json')
     # parser.add_argument('--pred_file', type=str, default='/Users/yangxiaorui/appen/code/mmdetection3d/demo/test.txt')
+    # parser.add_argument('--pred_file', type=str, default='/Users/yangxiaorui/Downloads/frame_6000_pred.json')
+
 
     parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150.json')
     parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
@@ -394,17 +402,17 @@ if __name__ == '__main__':
     args = parse_args()
 
     gt_file = args.gt_file
-    gt = build_scene(gt_file, index=0)
+    gt = build_scene(gt_file)
 
     pred_file = args.pred_file
     if pred_file.endswith(".txt"):
         preds = []
         pred_files = [l.strip() for l in open(pred_file, "r").readlines()]
         for pred in pred_files:
-            preds.extend(build_scene(pred))
+            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000))
     else:
-        preds = build_scene(pred_file)
-
+        preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000)
+    print(f"prediction {len(preds)} gt {len(gt)}") 
     for iou_threshold in np.arange(0.01, 0.92, 0.05):
         iou_threshold = round(iou_threshold, 2)
         recalls, precisions, ap = recall_precision(gt, preds, iou_threshold)
