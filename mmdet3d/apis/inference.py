@@ -206,7 +206,8 @@ def show_result_meshlab(data, result, out_dir, score_thr=0.0):
     else:
         pred_bboxes = result[0]['boxes_3d'].tensor.numpy()
         pred_scores = result[0]['scores_3d'].numpy()
-
+    #import ipdb
+    #ipdb.set_trace()
     # filter out low score bboxes for visualization
     if score_thr > 0:
         inds = pred_scores > score_thr
@@ -220,7 +221,7 @@ def show_result_meshlab(data, result, out_dir, score_thr=0.0):
         show_bboxes = Box3DMode.convert(pred_bboxes, box_mode, Box3DMode.DEPTH)
     else:
         show_bboxes = deepcopy(pred_bboxes)
-    show_result(points, None, show_bboxes, out_dir, file_name, show=False)
+    show_result(points, None, show_bboxes, out_dir, file_name, show=False, pred_scores=pred_scores)
 
     if 'img' not in data.keys():
         return out_dir, file_name

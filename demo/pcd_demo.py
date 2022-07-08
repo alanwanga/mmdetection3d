@@ -23,7 +23,7 @@ def main():
     model = init_detector(args.config, args.checkpoint, device=args.device)
     out_dir = os.path.join(args.out_dir, checkpoint_name)
     # test a single image
-    if args.pcd.endswith(".pcd"):
+    if args.pcd.endswith(".bin"):
         result, data = inference_detector(model, args.pcd)
         # show the results
         show_result_meshlab(data, result, out_dir, args.score_thr)

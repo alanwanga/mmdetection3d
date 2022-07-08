@@ -29,7 +29,7 @@ def _write_obj(points, out_filename):
     fout.close()
 
 
-def _write_oriented_bbox(scene_bbox, out_filename):
+def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None):
     """Export oriented (around Z axis) scene bbox to meshes.
 
     Args:
@@ -71,7 +71,8 @@ def _write_oriented_bbox(scene_bbox, out_filename):
     label = {}
     label['baseUrl'] = ''
     label['frames'] = []
-
+    #import ipdb
+    #ipdb.set_trace()
     for frameId in range(1):
         frame = {}
         frame['frameId'] = 0
@@ -80,7 +81,7 @@ def _write_oriented_bbox(scene_bbox, out_filename):
         if len(scene_bbox) == 0:
             scene_bbox = np.zeros((1, 7))
         
-        for box in scene_bbox:
+        for idx, box in enumerate(scene_bbox):
             item = {}
             item['id'] = str(uuid.uuid1())
             item['category'] = 'Car'
@@ -90,6 +91,8 @@ def _write_oriented_bbox(scene_bbox, out_filename):
             item['locked'] = None
             item['interpolated'] = False
             item['labels'] = None
+            if pred_scores is not None:
+                item['score'] = float(pred_scores[idx])
             frame['items'].append(item)
 
         label['frames'].append(frame)
@@ -104,7 +107,7 @@ def _write_oriented_bbox(scene_bbox, out_filename):
     return
 
 
-def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True):
+def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True, pred_scores=None):
     """Convert results into format that is directly readable for meshlab.
 
     Args:
@@ -137,7 +140,7 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True):
         # the positive direction for yaw in meshlab is clockwise
         gt_bboxes[:, 6] *= -1
         _write_oriented_bbox(gt_bboxes,
-                             osp.join(result_path, f'{filename}_gt.json'))
+                             osp.join(result_path, f'{filename}_gt.json'), pred_scores)
 
     if pred_bboxes is not None:
         # bottom center to gravity center
@@ -145,7 +148,7 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True):
         # the positive direction for yaw in meshlab is clockwise
         pred_bboxes[:, 6] *= -1
         _write_oriented_bbox(pred_bboxes,
-                             osp.join(result_path, f'{filename}_pred.json'))
+                             osp.join(result_path, f'{filename}_pred.json'), pred_scores)
 
 
 def show_seg_result(points,
