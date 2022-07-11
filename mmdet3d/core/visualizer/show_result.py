@@ -29,7 +29,7 @@ def _write_obj(points, out_filename):
     fout.close()
 
 
-def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None):
+def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None, pred_labels=None):
     """Export oriented (around Z axis) scene bbox to meshes.
 
     Args:
@@ -84,13 +84,15 @@ def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None):
         for idx, box in enumerate(scene_bbox):
             item = {}
             item['id'] = str(uuid.uuid1())
-            item['category'] = 'Car'
+            #item['category'] = 'Car'
             item['position'] = { 'x': float(box[1]), 'y': -float(box[0]), 'z': float(box[2])}
             item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5])}
             item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) - math.pi / 2 }
             item['locked'] = None
             item['interpolated'] = False
             item['labels'] = None
+            if pred_labels is not None:
+                item['category'] = int(pred_labels[idx])
             if pred_scores is not None:
                 item['score'] = float(pred_scores[idx])
             frame['items'].append(item)
@@ -107,7 +109,7 @@ def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None):
     return
 
 
-def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True, pred_scores=None):
+def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=False, pred_scores=None, pred_labels=None):
     """Convert results into format that is directly readable for meshlab.
 
     Args:
@@ -148,7 +150,7 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=True, pr
         # the positive direction for yaw in meshlab is clockwise
         pred_bboxes[:, 6] *= -1
         _write_oriented_bbox(pred_bboxes,
-                             osp.join(result_path, f'{filename}_pred.json'), pred_scores)
+                             osp.join(result_path, f'{filename}_pred.json'), pred_scores, pred_labels)
 
 
 def show_seg_result(points,
