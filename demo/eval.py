@@ -13,6 +13,30 @@ from pyquaternion import Quaternion
 from shapely.geometry import Polygon
 
 
+
+'''
+nuScenes: 
+CLASSES = ('car': 0, 'truck': 1, 'trailer': 2, 'bus': 3, 'construction_vehicle': 4,
+               'bicycle': 5, 'motorcycle': 6, 'pedestrian': 7, 'traffic_cone': 8,
+               'barrier': 9)
+qualcomm: 
+    "Car": 1,
+    "Bus": 2,
+    "Debris": 3,
+    "Motorcycle": 4,
+    "Truck": 5,
+    "Trailer": 6,
+    "Traffic Sign": 7,
+overlap classes: car: 0, truck: 1, trailer: 2, bus: 3, motorcycle: 6
+'''
+
+mapping = {
+    0: 'Car',
+    1: 'Truck',
+    2: 'Trailer',
+    3: 'Bus',
+    6: 'Motorcycle'
+}
 class Box3D:
     """Data class used during detection evaluation. Can be a prediction or ground truth."""
 
@@ -183,6 +207,8 @@ class Box3D:
 
 def group_by_key(detections, key):
     groups = defaultdict(list)
+    #import ipdb
+    #ipdb.set_trace()
     for detection in detections:
         groups[detection[key]].append(detection)
     return groups
@@ -233,69 +259,81 @@ def get_ious(gt_boxes, predicted_box):
     return [predicted_box.get_iou(x) for x in gt_boxes]
 
 
-def recall_precision(gt, predictions, iou_threshold):
-    num_gts = len(gt)
-    image_gts = group_by_key(gt, "sample_token")
-    image_gts = wrap_in_box(image_gts)
+def recall_precision(all_gts, all_predictions, iou_threshold):
+    all_gts = group_by_key(all_gts, 'category')
+    all_predictions = group_by_key(all_predictions, "category")
+    for cat in [0,1,3]:
+        gt = all_gts[mapping[cat]]
+        num_gts = len(gt)
+        if num_gts == 0:
+            #print(f"{mapping[cat]} no gt")
+            continue
+        image_gts = group_by_key(gt, "sample_token")
+        image_gts = wrap_in_box(image_gts)
 
-    sample_gt_checked = {sample_token: np.zeros(
-        len(boxes)) for sample_token, boxes in image_gts.items()}
+        sample_gt_checked = {sample_token: np.zeros(
+            len(boxes)) for sample_token, boxes in image_gts.items()}
+        
+        predictions = all_predictions[cat]
+        predictions = sorted(predictions, key=lambda x: x["score"], reverse=True)
+        if len(predictions) == 0:
+            #print(f"{mapping[cat]} no predictions")
+            continue
+        # go down dets and mark TPs and FPs
+        num_predictions = len(predictions)
+        tp = np.zeros(num_predictions)
+        fp = np.zeros(num_predictions)
 
-    predictions = sorted(predictions, key=lambda x: x["score"], reverse=True)
+        for prediction_index, prediction in enumerate(predictions):
+            predicted_box = Box3D(**prediction)
 
-    # go down dets and mark TPs and FPs
-    num_predictions = len(predictions)
-    tp = np.zeros(num_predictions)
-    fp = np.zeros(num_predictions)
+            sample_token = prediction["sample_token"]
 
-    for prediction_index, prediction in enumerate(predictions):
-        predicted_box = Box3D(**prediction)
+            max_overlap = -np.inf
+            jmax = -1
 
-        sample_token = prediction["sample_token"]
+            try:
+                gt_boxes = image_gts[sample_token]  # gt_boxes per sample
+                gt_checked = sample_gt_checked[sample_token]  # gt flags per sample
+            except KeyError:
+                gt_boxes = []
+                gt_checked = None
 
-        max_overlap = -np.inf
-        jmax = -1
+            if len(gt_boxes) > 0:
+                overlaps = get_ious(gt_boxes, predicted_box)
+                max_overlap = np.max(overlaps)
+                jmax = np.argmax(overlaps)
 
-        try:
-            gt_boxes = image_gts[sample_token]  # gt_boxes per sample
-            gt_checked = sample_gt_checked[sample_token]  # gt flags per sample
-        except KeyError:
-            gt_boxes = []
-            gt_checked = None
-
-        if len(gt_boxes) > 0:
-            overlaps = get_ious(gt_boxes, predicted_box)
-            max_overlap = np.max(overlaps)
-            jmax = np.argmax(overlaps)
-
-        if max_overlap > iou_threshold:
-            if gt_checked[jmax] == 0:
-                tp[prediction_index] = 1.0
-                gt_checked[jmax] = 1
-                # print(prediction)
-                # print(max_overlap)
-                # print(jmax)
+            if max_overlap > iou_threshold:
+                if gt_checked[jmax] == 0:
+                    tp[prediction_index] = 1.0
+                    gt_checked[jmax] = 1
+                    # print(prediction)
+                    # print(max_overlap)
+                    # print(jmax)
+                else:
+                    fp[prediction_index] = 1.0
             else:
                 fp[prediction_index] = 1.0
-        else:
-            fp[prediction_index] = 1.0
 
-    # compute precision recall
-    fp = np.cumsum(fp, axis=0)
-    tp = np.cumsum(tp, axis=0)
+        # compute precision recall
+        fp = np.cumsum(fp, axis=0)
+        tp = np.cumsum(tp, axis=0)
+        #print(num_gts)
+        #print(cat)
+        recalls = tp / float(num_gts)
 
-    recalls = tp / float(num_gts)
+        assert np.all(0 <= recalls) & np.all(recalls <= 1)
 
-    assert np.all(0 <= recalls) & np.all(recalls <= 1)
+        # avoid divide by zero in case the first detection matches a difficult ground truth
+        precisions = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
 
-    # avoid divide by zero in case the first detection matches a difficult ground truth
-    precisions = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+        assert np.all(0 <= precisions) & np.all(precisions <= 1)
 
-    assert np.all(0 <= precisions) & np.all(precisions <= 1)
-
-    ap = get_ap(recalls, precisions)
-
-    return recalls, precisions, ap
+        ap = get_ap(recalls, precisions)
+        #print(f"Cat: {mapping[cat]}, prediction {len(predictions)} gt {len(gt)}")
+        print(f"Cat: {mapping[cat]}, IoU threshold: {iou_threshold:.2f}, Precsion: {precisions[-1]:.4f}, Recall: {recalls[-1]:.4f}, AP: {ap:.4f}")
+    # return recalls, precisions, ap
 
 
 def get_average_precisions(gt: list, predictions: list, class_names: list, iou_threshold: float) -> np.array:
@@ -349,7 +387,7 @@ def get_class_names(gt: dict) -> list:
     return sorted(list(set([x["name"] for x in gt])))
 
 
-def build_scene(file: str, score_thres=0.0, index=None, frameId=None) -> list:
+def build_scene(file: str, score_thres=0.0, index=None, frameId=None, cats=None) -> list:
     scene = []
     with open(file) as f:
         data = json.load(f)
@@ -361,6 +399,8 @@ def build_scene(file: str, score_thres=0.0, index=None, frameId=None) -> list:
                 continue
             for o in frame['items']:
                 if 'score' in o and o['score'] < score_thres:
+                    continue
+                if cats is not None and o['category'] not in cats:
                     continue
                 item = {}
                 if frameId is not None:
@@ -376,6 +416,7 @@ def build_scene(file: str, score_thres=0.0, index=None, frameId=None) -> list:
                 quat = euler.as_quat()
                 item['rotation'] = quat
                 item['name'] = o['category']
+                item['category'] = o['category']
                 item['score'] = 1 if 'score' not in o else o['score']
                 items.append(item)
             scene.append(items)
@@ -402,19 +443,20 @@ if __name__ == '__main__':
     args = parse_args()
 
     gt_file = args.gt_file
-    gt = build_scene(gt_file)
+    gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus', 'Trailer', 'Motorcycle'])
 
     pred_file = args.pred_file
     if pred_file.endswith(".txt"):
         preds = []
         pred_files = [l.strip() for l in open(pred_file, "r").readlines()]
         for pred in pred_files:
-            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000))
+            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0,1,2,3,6]))
     else:
-        preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000)
-    print(f"prediction {len(preds)} gt {len(gt)}") 
-    for iou_threshold in np.arange(0.01, 0.92, 0.05):
+        preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000, cats=[0,1,2,3,6])
+    for iou_threshold in np.arange(0.1, 0.91, 0.1):
         iou_threshold = round(iou_threshold, 2)
-        recalls, precisions, ap = recall_precision(gt, preds, iou_threshold)
-        print("IoU threshold: {:.2f} Precsion: {:.12f}, Recall: {:.12f}"
-              .format(iou_threshold, precisions[-1], recalls[-1]))
+        # for cat in ["Car", "Truck", "Trailer", "Bus", "Motorcycle"]
+        # recalls, precisions, ap = recall_precision(gt, preds, iou_threshold)
+        recall_precision(gt, preds, iou_threshold)
+
+        

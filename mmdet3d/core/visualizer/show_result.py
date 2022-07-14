@@ -1,10 +1,12 @@
-import json
-import uuid
-import math
+# Copyright (c) OpenMMLab. All rights reserved.
+from os import path as osp
+import array
 import mmcv
 import numpy as np
 import trimesh
-from os import path as osp
+
+from .image_vis import (draw_camera_bbox3d_on_img, draw_depth_bbox3d_on_img,
+                        draw_lidar_bbox3d_on_img)
 
 
 def _write_obj(points, out_filename):
@@ -29,87 +31,62 @@ def _write_obj(points, out_filename):
     fout.close()
 
 
-def _write_oriented_bbox(scene_bbox, out_filename, pred_scores=None, pred_labels=None):
+def _write_oriented_bbox(scene_bbox, out_filename):
     """Export oriented (around Z axis) scene bbox to meshes.
 
     Args:
         scene_bbox(list[ndarray] or ndarray): xyz pos of center and
-            3 lengths (dx,dy,dz) and heading angle around Z axis.
+            3 lengths (x_size, y_size, z_size) and heading angle around Z axis.
             Y forward, X right, Z upward. heading angle of positive X is 0,
             heading angle of positive Y is 90 degrees.
         out_filename(str): Filename.
     """
 
-    # def heading2rotmat(heading_angle):
-    #     rotmat = np.zeros((3, 3))
-    #     rotmat[2, 2] = 1
-    #     cosval = np.cos(heading_angle)
-    #     sinval = np.sin(heading_angle)
-    #     rotmat[0:2, 0:2] = np.array([[cosval, -sinval], [sinval, cosval]])
-    #     return rotmat
+    def heading2rotmat(heading_angle):
+        rotmat = np.zeros((3, 3))
+        rotmat[2, 2] = 1
+        cosval = np.cos(heading_angle)
+        sinval = np.sin(heading_angle)
+        rotmat[0:2, 0:2] = np.array([[cosval, -sinval], [sinval, cosval]])
+        return rotmat
 
-    # def convert_oriented_box_to_trimesh_fmt(box):
-    #     ctr = box[:3]
-    #     lengths = box[3:6]
-    #     trns = np.eye(4)
-    #     trns[0:3, 3] = ctr
-    #     trns[3, 3] = 1.0
-    #     trns[0:3, 0:3] = heading2rotmat(box[6])
-    #     box_trimesh_fmt = trimesh.creation.box(lengths, trns)
-    #     return box_trimesh_fmt
+    def convert_oriented_box_to_trimesh_fmt(box):
+        ctr = box[:3]
+        lengths = box[3:6]
+        trns = np.eye(4)
+        trns[0:3, 3] = ctr
+        trns[3, 3] = 1.0
+        trns[0:3, 0:3] = heading2rotmat(box[6])
+        box_trimesh_fmt = trimesh.creation.box(lengths, trns)
+        return box_trimesh_fmt
 
-    # if len(scene_bbox) == 0:
-    #     scene_bbox = np.zeros((1, 7))
-    # scene = trimesh.scene.Scene()
-    # for box in scene_bbox:
-    #     scene.add_geometry(convert_oriented_box_to_trimesh_fmt(box))
+    if len(scene_bbox) == 0:
+        scene_bbox = np.zeros((1, 7))
+    scene = trimesh.scene.Scene()
+    for box in scene_bbox:
+        scene.add_geometry(convert_oriented_box_to_trimesh_fmt(box))
 
-    # mesh_list = trimesh.util.concatenate(scene.dump())
-    # # save to obj file
-    # trimesh.io.export.export_mesh(mesh_list, out_filename, file_type='obj')
-
-    label = {}
-    label['baseUrl'] = ''
-    label['frames'] = []
-    #import ipdb
-    #ipdb.set_trace()
-    for frameId in range(1):
-        frame = {}
-        frame['frameId'] = 0
-        frame['items'] = []
-
-        if len(scene_bbox) == 0:
-            scene_bbox = np.zeros((1, 7))
-        
-        for idx, box in enumerate(scene_bbox):
-            item = {}
-            item['id'] = str(uuid.uuid1())
-            #item['category'] = 'Car'
-            item['position'] = { 'x': float(box[1]), 'y': -float(box[0]), 'z': float(box[2])}
-            item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5])}
-            item['rotation'] = { 'x': 0, 'y': 0, 'z': float(box[6]) - math.pi / 2 }
-            item['locked'] = None
-            item['interpolated'] = False
-            item['labels'] = None
-            if pred_labels is not None:
-                item['category'] = int(pred_labels[idx])
-            if pred_scores is not None:
-                item['score'] = float(pred_scores[idx])
-            frame['items'].append(item)
-
-        label['frames'].append(frame)
-
-    with open(out_filename, 'w') as outfile:
-        json.dump(label, outfile, indent=4)
-
-    label['threshold'] = { 'position': 1, 'rotation': 1, 'dimension': 1 }
-    with open(out_filename.replace('.json', '.bk.json'), 'w') as outfile:
-        json.dump(label, outfile, indent=4)
+    mesh_list = trimesh.util.concatenate(scene.dump())
+    # save to obj file
+    trimesh.io.export.export_mesh(mesh_list, out_filename, file_type='obj')
 
     return
 
 
-def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=False, pred_scores=None, pred_labels=None):
+def write(path, obj):
+    fileobj = open(path, mode='wb')
+    fileobj.write(obj)
+    fileobj.close()
+
+
+def show_result(points,
+                gt_bboxes,
+                pred_bboxes,
+                out_dir,
+                filename,
+                show=False,
+                snapshot=False,
+                pred_labels=None):
     """Convert results into format that is directly readable for meshlab.
 
     Args:
@@ -118,39 +95,64 @@ def show_result(points, gt_bboxes, pred_bboxes, out_dir, filename, show=False, p
         pred_bboxes (np.ndarray): Predicted boxes.
         out_dir (str): Path of output directory
         filename (str): Filename of the current frame.
-        show (bool): Visualize the results online. Defaults to True.
+        show (bool, optional): Visualize the results online. Defaults to False.
+        snapshot (bool, optional): Whether to save the online results.
+            Defaults to False.
+        pred_labels (np.ndarray, optional): Predicted labels of boxes.
+            Defaults to None.
     """
+    result_path = osp.join(out_dir, filename)
+    mmcv.mkdir_or_exist(result_path)
+    #import ipdb;
+    #ipdb.set_trace()
+    np.save(osp.join(result_path, f'{filename}_points'), points)
+    np.save(osp.join(result_path, f'{filename}_pred'), pred_bboxes)
+    np.save(osp.join(result_path, f'{filename}_gt'), gt_bboxes)
+
     if show:
         from .open3d_vis import Visualizer
 
         vis = Visualizer(points)
         if pred_bboxes is not None:
-            vis.add_bboxes(bbox3d=pred_bboxes)
+            if pred_labels is None:
+                vis.add_bboxes(bbox3d=pred_bboxes)
+            else:
+                palette = np.random.randint(
+                    0, 255, size=(pred_labels.max() + 1, 3)) / 256
+                labelDict = {}
+                for j in range(len(pred_labels)):
+                    i = int(pred_labels[j].numpy())
+                    if labelDict.get(i) is None:
+                        labelDict[i] = []
+                    labelDict[i].append(pred_bboxes[j])
+                for i in labelDict:
+                    vis.add_bboxes(
+                        bbox3d=np.array(labelDict[i]),
+                        bbox_color=palette[i],
+                        points_in_box_color=palette[i])
+
         if gt_bboxes is not None:
             vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
-        vis.show()
+        show_path = osp.join(result_path,
+                             f'{filename}_online.png') if snapshot else None
+        vis.show(show_path)
 
-    result_path = osp.join(out_dir, filename)
-    mmcv.mkdir_or_exist(result_path)
-
-    if points is not None:
+    if points is not None and not osp.exists(osp.join(result_path, f'{filename}_points.obj')):
         _write_obj(points, osp.join(result_path, f'{filename}_points.obj'))
 
     if gt_bboxes is not None:
         # bottom center to gravity center
         gt_bboxes[..., 2] += gt_bboxes[..., 5] / 2
-        # the positive direction for yaw in meshlab is clockwise
-        gt_bboxes[:, 6] *= -1
-        _write_oriented_bbox(gt_bboxes,
-                             osp.join(result_path, f'{filename}_gt.json'), pred_scores)
+        if not osp.exists(osp.join(result_path, f'{filename}_gt.obj')):
+            _write_oriented_bbox(gt_bboxes,
+                             osp.join(result_path, f'{filename}_gt.obj'))
 
     if pred_bboxes is not None:
         # bottom center to gravity center
         pred_bboxes[..., 2] += pred_bboxes[..., 5] / 2
-        # the positive direction for yaw in meshlab is clockwise
-        pred_bboxes[:, 6] *= -1
-        _write_oriented_bbox(pred_bboxes,
-                             osp.join(result_path, f'{filename}_pred.json'), pred_scores, pred_labels)
+        if not osp.exists(osp.join(result_path, f'{filename}_pred.obj')):
+            _write_oriented_bbox(pred_bboxes,
+                             osp.join(result_path, f'{filename}_pred.obj'))
 
 
 def show_seg_result(points,
@@ -160,7 +162,8 @@ def show_seg_result(points,
                     filename,
                     palette,
                     ignore_index=None,
-                    show=False):
+                    show=False,
+                    snapshot=False):
     """Convert results into format that is directly readable for meshlab.
 
     Args:
@@ -170,9 +173,11 @@ def show_seg_result(points,
         out_dir (str): Path of output directory
         filename (str): Filename of the current frame.
         palette (np.ndarray): Mapping between class labels and colors.
-        ignore_index (int, optional): The label index to be ignored, e.g. \
+        ignore_index (int, optional): The label index to be ignored, e.g.
             unannotated points. Defaults to None.
         show (bool, optional): Visualize the results online. Defaults to False.
+        snapshot (bool, optional): Whether to save the online results.
+            Defaults to False.
     """
     # we need 3D coordinates to visualize segmentation mask
     if gt_seg is not None or pred_seg is not None:
@@ -195,6 +200,9 @@ def show_seg_result(points,
         pred_seg_color = np.concatenate([points[:, :3], pred_seg_color],
                                         axis=1)
 
+    result_path = osp.join(out_dir, filename)
+    mmcv.mkdir_or_exist(result_path)
+
     # online visualization of segmentation mask
     # we show three masks in a row, scene_points, gt_mask, pred_mask
     if show:
@@ -205,10 +213,9 @@ def show_seg_result(points,
             vis.add_seg_mask(gt_seg_color)
         if pred_seg is not None:
             vis.add_seg_mask(pred_seg_color)
-        vis.show()
-
-    result_path = osp.join(out_dir, filename)
-    mmcv.mkdir_or_exist(result_path)
+        show_path = osp.join(result_path,
+                             f'{filename}_online.png') if snapshot else None
+        vis.show(show_path)
 
     if points is not None:
         _write_obj(points, osp.join(result_path, f'{filename}_points.obj'))
@@ -227,9 +234,9 @@ def show_multi_modality_result(img,
                                proj_mat,
                                out_dir,
                                filename,
-                               depth_bbox=False,
+                               box_mode='lidar',
                                img_metas=None,
-                               show=True,
+                               show=False,
                                gt_bbox_color=(61, 102, 255),
                                pred_bbox_color=(241, 101, 72)):
     """Convert multi-modality detection results into 2D results.
@@ -238,24 +245,31 @@ def show_multi_modality_result(img,
 
     Args:
         img (np.ndarray): The numpy array of image in cv2 fashion.
-        gt_bboxes (np.ndarray): Ground truth boxes.
-        pred_bboxes (np.ndarray): Predicted boxes.
+        gt_bboxes (:obj:`BaseInstance3DBoxes`): Ground truth boxes.
+        pred_bboxes (:obj:`BaseInstance3DBoxes`): Predicted boxes.
         proj_mat (numpy.array, shape=[4, 4]): The projection matrix
             according to the camera intrinsic parameters.
-        out_dir (str): Path of output directory
+        out_dir (str): Path of output directory.
         filename (str): Filename of the current frame.
-        depth_bbox (bool): Whether we are projecting camera bbox or lidar bbox.
-        img_metas (dict): Used in projecting cameta bbox.
-        show (bool): Visualize the results online. Defaults to True.
-        gt_bbox_color (str or tuple(int)): Color of bbox lines.
-           The tuple of color should be in BGR order. Default: (255, 102, 61)
-        pred_bbox_color (str or tuple(int)): Color of bbox lines.
-           The tuple of color should be in BGR order. Default: (72, 101, 241)
+        box_mode (str, optional): Coordinate system the boxes are in.
+            Should be one of 'depth', 'lidar' and 'camera'.
+            Defaults to 'lidar'.
+        img_metas (dict, optional): Used in projecting depth bbox.
+            Defaults to None.
+        show (bool, optional): Visualize the results online. Defaults to False.
+        gt_bbox_color (str or tuple(int), optional): Color of bbox lines.
+           The tuple of color should be in BGR order. Default: (255, 102, 61).
+        pred_bbox_color (str or tuple(int), optional): Color of bbox lines.
+           The tuple of color should be in BGR order. Default: (72, 101, 241).
     """
-    if depth_bbox:
-        from .open3d_vis import draw_depth_bbox3d_on_img as draw_bbox
+    if box_mode == 'depth':
+        draw_bbox = draw_depth_bbox3d_on_img
+    elif box_mode == 'lidar':
+        draw_bbox = draw_lidar_bbox3d_on_img
+    elif box_mode == 'camera':
+        draw_bbox = draw_camera_bbox3d_on_img
     else:
-        from .open3d_vis import draw_lidar_bbox3d_on_img as draw_bbox
+        raise NotImplementedError(f'unsupported box mode {box_mode}')
 
     result_path = osp.join(out_dir, filename)
     mmcv.mkdir_or_exist(result_path)
