@@ -7,7 +7,7 @@ from mmcv.parallel import collate, scatter
 from mmcv.runner import load_checkpoint
 from os import path as osp
 
-from mmdet3d.core import (Box3DMode, DepthInstance3DBoxes,
+from mmdet3d.core import (Box3DMode, DepthInstance3DBoxes, Coord3DMode,
                           LiDARInstance3DBoxes, show_multi_modality_result,
                           show_result)
 from mmdet3d.core.bbox import get_box_type
@@ -107,6 +107,8 @@ def inference_detector(model, pcd):
     # forward the model
     with torch.no_grad():
         result = model(return_loss=False, rescale=True, **data)
+    #import ipdb;
+    #ipdb.set_trace()
     return result, data
 
 
@@ -185,7 +187,7 @@ def inference_multi_modality_detector(model, pcd, image, ann_file):
     return result, data
 
 
-def show_result_meshlab(data, result, out_dir, score_thr=0.0):
+def show_result_meshlab(data, result, out_dir, score_thr=0.0, gt_file=None):
     """Show result by meshlab.
 
     Args:
@@ -197,7 +199,7 @@ def show_result_meshlab(data, result, out_dir, score_thr=0.0):
     points = data['points'][0][0].cpu().numpy()
     pts_filename = data['img_metas'][0][0]['pts_filename']
     file_name = osp.split(pts_filename)[-1].split('.')[0]
-
+    show_points = Coord3DMode.convert_point(points, Coord3DMode.LIDAR, Coord3DMode.DEPTH)
     assert out_dir is not None, 'Expect out_dir, got none.'
 
     if 'pts_bbox' in result[0].keys():
@@ -221,8 +223,11 @@ def show_result_meshlab(data, result, out_dir, score_thr=0.0):
         show_bboxes = Box3DMode.convert(pred_bboxes, box_mode, Box3DMode.DEPTH)
     else:
         show_bboxes = deepcopy(pred_bboxes)
-    show_result(points, None, show_bboxes, out_dir, file_name, show=False, pred_scores=pred_scores)
-
+    #show_result(points, None, show_bboxes, out_dir, file_name, show=False, pred_scores=pred_scores, pred_labels=result[0]['pts_bbox']['labels_3d'].numpy())
+    #show_points = Coord3DMode.convert_point(points, Coord3DMode.LIDAR, Coord3DMode.DEPTH)
+    #if gt_file is not None and gt_file endswith(".json"):
+    
+    show_result(show_points, None, show_bboxes, out_dir, file_name, show=False)
     if 'img' not in data.keys():
         return out_dir, file_name
 

@@ -13,9 +13,9 @@ def main():
     parser.add_argument(
         '--device', default='cuda:0', help='Device used for inference')
     parser.add_argument(
-        '--score-thr', type=float, default=0.0, help='bbox score threshold')
+        '--score-thr', type=float, default=0.1, help='bbox score threshold')
     parser.add_argument(
-        '--out-dir', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred', help='dir to save results')
+        '--out-dir', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/test', help='dir to save results')
     args = parser.parse_args()
     checkpoint_name = os.path.basename(args.checkpoint).split('.')[0]
 
