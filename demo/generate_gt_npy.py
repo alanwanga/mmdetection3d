@@ -35,6 +35,7 @@ def build_scene(annos):
     rbbox_array[:, 3] = [box['dimension']['x'] for box in bbox_result['items']]
     rbbox_array[:, 4] = [box['dimension']['y'] for box in bbox_result['items']]
     rbbox_array[:, 5] = [box['dimension']['z'] for box in bbox_result['items']]
+    rbbox_array[:, 2] -= rbbox_array[:, 5] / 2
     rbbox_array[:, 6] = [get_yaw(box) for box in bbox_result['items']]
     return rbbox_array
 
