@@ -262,7 +262,7 @@ def get_ious(gt_boxes, predicted_box):
 def recall_precision(all_gts, all_predictions, iou_threshold):
     all_gts = group_by_key(all_gts, 'category')
     all_predictions = group_by_key(all_predictions, "category")
-    for cat in [0,1,3]:
+    for cat in [0]:
         gt = all_gts[mapping[cat]]
         num_gts = len(gt)
         if num_gts == 0:
@@ -283,7 +283,8 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
         num_predictions = len(predictions)
         tp = np.zeros(num_predictions)
         fp = np.zeros(num_predictions)
-
+        #import ipdb
+        #ipdb.set_trace()
         for prediction_index, prediction in enumerate(predictions):
             predicted_box = Box3D(**prediction)
 
@@ -298,7 +299,7 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
             except KeyError:
                 gt_boxes = []
                 gt_checked = None
-
+           # print(gt_boxes)
             if len(gt_boxes) > 0:
                 overlaps = get_ious(gt_boxes, predicted_box)
                 max_overlap = np.max(overlaps)
@@ -308,9 +309,6 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
                 if gt_checked[jmax] == 0:
                     tp[prediction_index] = 1.0
                     gt_checked[jmax] = 1
-                    # print(prediction)
-                    # print(max_overlap)
-                    # print(jmax)
                 else:
                     fp[prediction_index] = 1.0
             else:
@@ -407,8 +405,11 @@ def build_scene(file: str, score_thres=0.0, index=None, frameId=None, cats=None)
                     item['sample_token'] = str(frameId)
                 else:
                     item['sample_token'] = str(frame['frameId'])
-                item['translation'] = [o['position']['x'],
-                                       o['position']['y'], o['position']['z']]
+                if 'score' not in o:
+                    item['translation'] = [o['position']['x'],
+                                           o['position']['y'], o['position']['z']]
+                else:
+                    item['translation'] = [o['position']['x'], o['position']['y'], o['position']['z']]
                 item['size'] = [o['dimension']['x'],
                                 o['dimension']['y'], o['dimension']['z']]
                 euler = R.from_euler(
@@ -432,8 +433,8 @@ def parse_args():
 
 
     parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150.json')
-    parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
-
+    #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
+    parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/waymo_pp/waymo_pp.txt')
     args = parser.parse_args()
     return args
 
@@ -443,14 +444,14 @@ if __name__ == '__main__':
     args = parse_args()
 
     gt_file = args.gt_file
-    gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus', 'Trailer', 'Motorcycle'])
-
+    #gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus', 'Trailer', 'Motorcycle'])
+    gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus'])
     pred_file = args.pred_file
     if pred_file.endswith(".txt"):
         preds = []
         pred_files = [l.strip() for l in open(pred_file, "r").readlines()]
         for pred in pred_files:
-            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0,1,2,3,6]))
+            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0]))
     else:
         preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000, cats=[0,1,2,3,6])
     for iou_threshold in np.arange(0.1, 0.91, 0.1):

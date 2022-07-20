@@ -4,7 +4,9 @@ import array
 import mmcv
 import numpy as np
 import trimesh
-
+import math
+import uuid
+import json
 from .image_vis import (draw_camera_bbox3d_on_img, draw_depth_bbox3d_on_img,
                         draw_lidar_bbox3d_on_img)
 
@@ -79,6 +81,33 @@ def write(path, obj):
     fileobj.close()
 
 
+def dump_pred_json(scene_bbox, out_filename, pred_scores=None, pred_labels=None):
+        label = {}
+        label['baseUrl'] = ''
+        label['frames'] = []
+        frame = {}
+        frame['frameId'] = 0
+        frame['items'] = []
+        if len(scene_bbox) == 1:
+            scene_bbox = np.zeros((1, 7))
+        for idx, box in enumerate(scene_bbox):
+            item = {}
+            item['id'] = str(uuid.uuid1())
+            item['position'] = { 'x': float(box[1]), 'y': -float(box[0]), 'z': float(box[2]) }
+            item['dimension'] = { 'x': float(box[3]), 'y': float(box[4]), 'z': float(box[5]) }
+            item['rotation'] = { 'x': 0, 'y': 0, 'z': -float(box[6]) - math.pi / 2  }
+            item['locked'] = None
+            item['interpolated'] = False
+            item['labels'] = None
+            if pred_labels is not None:
+                item['category'] = int(pred_labels[idx])
+            if pred_scores is not None:
+                item['score'] = float(pred_scores[idx])
+            frame['items'].append(item)
+        label['frames'].append(frame)
+        with open(out_filename, 'w') as outfile:
+            json.dump(label, outfile, indent=4)
+
 def show_result(points,
                 gt_bboxes,
                 pred_bboxes,
@@ -86,7 +115,8 @@ def show_result(points,
                 filename,
                 show=False,
                 snapshot=False,
-                pred_labels=None):
+                pred_labels=None,
+                pred_scores=None):
     """Convert results into format that is directly readable for meshlab.
 
     Args:
@@ -107,7 +137,6 @@ def show_result(points,
     #ipdb.set_trace()
     np.save(osp.join(result_path, f'{filename}_points'), points)
     np.save(osp.join(result_path, f'{filename}_pred'), pred_bboxes)
-    np.save(osp.join(result_path, f'{filename}_gt'), gt_bboxes)
 
     if show:
         from .open3d_vis import Visualizer
@@ -150,9 +179,10 @@ def show_result(points,
     if pred_bboxes is not None:
         # bottom center to gravity center
         pred_bboxes[..., 2] += pred_bboxes[..., 5] / 2
-        if not osp.exists(osp.join(result_path, f'{filename}_pred.obj')):
-            _write_oriented_bbox(pred_bboxes,
-                             osp.join(result_path, f'{filename}_pred.obj'))
+        dump_pred_json(pred_bboxes, osp.join(result_path, f'{filename}_pred.json'), pred_scores, pred_labels)
+        #if not osp.exists(osp.join(result_path, f'{filename}_pred.obj')):
+         #   _write_oriented_bbox(pred_bboxes,
+          #                   osp.join(result_path, f'{filename}_pred.obj'))
 
 
 def show_seg_result(points,
