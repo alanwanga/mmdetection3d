@@ -262,7 +262,7 @@ def get_ious(gt_boxes, predicted_box):
 def recall_precision(all_gts, all_predictions, iou_threshold):
     all_gts = group_by_key(all_gts, 'category')
     all_predictions = group_by_key(all_predictions, "category")
-    for cat in [0]:
+    for cat in [0, 1, 3]:
         gt = all_gts[mapping[cat]]
         num_gts = len(gt)
         if num_gts == 0:
@@ -330,7 +330,7 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
 
         ap = get_ap(recalls, precisions)
         #print(f"Cat: {mapping[cat]}, prediction {len(predictions)} gt {len(gt)}")
-        print(f"Cat: {mapping[cat]}, IoU threshold: {iou_threshold:.2f}, Precsion: {precisions[-1]:.4f}, Recall: {recalls[-1]:.4f}, AP: {ap:.4f}")
+        print(f"{mapping[cat]},  {iou_threshold:.2f}, {precisions[-1]:.4f}, {recalls[-1]:.4f}, {ap:.4f}")
     # return recalls, precisions, ap
 
 
@@ -385,31 +385,44 @@ def get_class_names(gt: dict) -> list:
     return sorted(list(set([x["name"] for x in gt])))
 
 
-def build_scene(file: str, score_thres=0.0, index=None, frameId=None, cats=None) -> list:
+def build_scene(file: str, score_thres=0.0, index=None, frameId=None, cats=None, nms_res=None) -> list:
     scene = []
+    if file.endswith('.npy'):
+        file = file.replace('npy', 'json')
     with open(file) as f:
         data = json.load(f)
+        if 'frames' not in data:
+            new_data = dict()
+            new_data['frames'] = data
+            data = new_data
         for frame in data['frames']:
             items = []
             if 'items' not in frame:
                 continue
-            if index is not None and frame['frameId'] > index:
-                continue
-            for o in frame['items']:
+            #if index is not None and frame['frameId'] > index:
+             #   continue
+            valid_idxs = []
+            for o_idx, o in enumerate(frame['items']):
                 if 'score' in o and o['score'] < score_thres:
                     continue
+                #valid_idxs.append(o_idx)
+                if 'point_count' in o and o['point_count'] == 0:
+                    #print("no point")
+                    continue
+                valid_idxs.append(o_idx)
+            for new_idx, o_idx in enumerate(valid_idxs):
+                o = frame['items'][o_idx]
                 if cats is not None and o['category'] not in cats:
+                    continue
+                if nms_res is not None and new_idx not in nms_res:
+                    print(f"{frame['frameId']} discard {o_idx}")
                     continue
                 item = {}
                 if frameId is not None:
                     item['sample_token'] = str(frameId)
                 else:
                     item['sample_token'] = str(frame['frameId'])
-                if 'score' not in o:
-                    item['translation'] = [o['position']['x'],
-                                           o['position']['y'], o['position']['z']]
-                else:
-                    item['translation'] = [o['position']['x'], o['position']['y'], o['position']['z']]
+                item['translation'] = [o['position']['x'], o['position']['y'], o['position']['z']]
                 item['size'] = [o['dimension']['x'],
                                 o['dimension']['y'], o['dimension']['z']]
                 euler = R.from_euler(
@@ -432,9 +445,10 @@ def parse_args():
     # parser.add_argument('--pred_file', type=str, default='/Users/yangxiaorui/Downloads/frame_6000_pred.json')
 
 
-    parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150.json')
-    #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
-    parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/waymo_pp/waymo_pp.txt')
+    parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150_new.json')
+    parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
+    #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/waymo_pp/waymo_pp.txt')
+    #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/cp/cp_pred.txt')
     args = parser.parse_args()
     return args
 
@@ -447,11 +461,19 @@ if __name__ == '__main__':
     #gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus', 'Trailer', 'Motorcycle'])
     gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus'])
     pred_file = args.pred_file
+    nms_res = [l.strip() for l in open("/home/ssm-user/xiaorui/lidar/qualcomm/pred/cp/nms_result.txt", "r").readlines()]
+
     if pred_file.endswith(".txt"):
         preds = []
         pred_files = [l.strip() for l in open(pred_file, "r").readlines()]
-        for pred in pred_files:
-            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0]))
+        
+        for idx, pred in enumerate(pred_files):
+            #pred_id = int(pred[-13:-9]) - 6000
+            nms_result = [int(a) for a in nms_res[idx].split(',')]
+           # import ipdb
+           # ipdb.set_trace()
+            #print(pred)
+            preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0,1,2,3,6], nms_res=nms_result))
     else:
         preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000, cats=[0,1,2,3,6])
     for iou_threshold in np.arange(0.1, 0.91, 0.1):
