@@ -472,23 +472,23 @@ class NuScenesDataset(Custom3DDataset):
         Returns:
             dict[str, float]: Results of each evaluation metric.
         """
-        result_files, tmp_dir = self.format_results(results, jsonfile_prefix)
+        #result_files, tmp_dir = self.format_results(results, jsonfile_prefix)
 
-        if isinstance(result_files, dict):
-            results_dict = dict()
-            for name in result_names:
-                print('Evaluating bboxes of {}'.format(name))
-                ret_dict = self._evaluate_single(result_files[name])
-            results_dict.update(ret_dict)
-        elif isinstance(result_files, str):
-            results_dict = self._evaluate_single(result_files)
+        #if isinstance(result_files, dict):
+        #    results_dict = dict()
+        #    for name in result_names:
+        #        print('Evaluating bboxes of {}'.format(name))
+        #        ret_dict = self._evaluate_single(result_files[name])
+        #    results_dict.update(ret_dict)
+        #elif isinstance(result_files, str):
+        #    results_dict = self._evaluate_single(result_files)
 
-        if tmp_dir is not None:
-            tmp_dir.cleanup()
+        #if tmp_dir is not None:
+        #    tmp_dir.cleanup()
 
         if show:
             self.show(results, out_dir)
-        return results_dict
+        #return results_dict
 
     def show(self, results, out_dir):
         """Results visualization.

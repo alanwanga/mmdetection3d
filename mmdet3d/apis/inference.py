@@ -227,7 +227,7 @@ def show_result_meshlab(data, result, out_dir, score_thr=0.0, gt_file=None):
     #show_points = Coord3DMode.convert_point(points, Coord3DMode.LIDAR, Coord3DMode.DEPTH)
     #if gt_file is not None and gt_file endswith(".json"):
     
-    show_result(show_points, None, show_bboxes, out_dir, file_name, show=False)
+    show_result(show_points, None, show_bboxes, out_dir, file_name, show=False, pred_scores=pred_scores, pred_labels=result[0]['pts_bbox']['labels_3d'].numpy())
     if 'img' not in data.keys():
         return out_dir, file_name
 
