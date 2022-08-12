@@ -2,6 +2,7 @@ import json
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import math
+from tqdm import tqdm
 
 
 def get_yaw(o):
@@ -25,9 +26,13 @@ def build_scene(annos):
     bbox_result = dict()
     bbox_result['items'] = []
     for idx, o in enumerate(annos['items']):
+        # if o['category'] not in ['Car', 'Truck', 'Bus']:
+        #     continue
+        if abs(o['position']['x']) > 100 or abs(o['position']['y']) > 100:
+            continue
         count += 1
         bbox_result['items'].append(o)
-    print(count)
+    # print(count)
     rbbox_array = np.zeros((len(bbox_result['items']), 9))
     rbbox_array[:, 0] = [-box['position']['y'] for box in bbox_result['items']]
     rbbox_array[:, 1] = [box['position']['x'] for box in bbox_result['items']]
@@ -41,7 +46,9 @@ def build_scene(annos):
 
 
 data = json.load(open("/Users/yangxiaorui/Downloads/222.json", 'r'))
-frame_id = 0
-annos = data['frames'][frame_id]
-gt_bboxes = build_scene(annos)
-np.save(f"/Users/yangxiaorui/Downloads/frame_{frame_id}_gt", gt_bboxes)
+frame_ids = np.arange(0, 151, 10)
+frame_ids[-1] = 149
+for frame_id in tqdm(frame_ids):
+    annos = data['frames'][frame_id]
+    gt_bboxes = build_scene(annos)
+    np.save(f"/Users/yangxiaorui/Downloads/interval_10/frame_{6000 + frame_id}/frame_{6000 + frame_id}_gt", gt_bboxes)

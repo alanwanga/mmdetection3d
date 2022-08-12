@@ -62,7 +62,8 @@ def _draw_bboxes(bbox3d,
                  points_in_box_color=(1, 0, 0),
                  rot_axis=2,
                  center_mode='lidar_bottom',
-                 mode='xyz'):
+                 mode='xyz',
+                 z_offset=None):
     """Draw bbox on visualizer and change the color of points inside bbox3d.
 
     Args:
@@ -85,15 +86,10 @@ def _draw_bboxes(bbox3d,
 
     in_box_color = np.array(points_in_box_color)
     for i in range(len(bbox3d)):
-        # if i == 1:
-        #     import ipdb
-        #     ipdb.set_trace()
-        #     print(1)
         center = bbox3d[i, 0:3]
         dim = bbox3d[i, 3:6]
         yaw = np.zeros(3)
         yaw[rot_axis] = -bbox3d[i, 6]
-        # yaw = bbox3d[i, 6:]
         rot_mat = geometry.get_rotation_matrix_from_xyz(yaw)
 
         if center_mode == 'lidar_bottom':
@@ -579,7 +575,7 @@ class Visualizer(object):
                          self.pcd, bbox_color, points_in_box_color, rot_axis,
                          center_mode, mode)
 
-    def add_bboxes(self, bbox3d, bbox_color=None, points_in_box_color=None):
+    def add_bboxes(self, bbox3d, bbox_color=None, points_in_box_color=None, z_offset=None):
         """Add bounding box to visualizer.
 
         Args:
@@ -597,7 +593,7 @@ class Visualizer(object):
             points_in_box_color = self.points_in_box_color
         _draw_bboxes(bbox3d, self.o3d_visualizer, self.points_colors, self.pcd,
                      bbox_color, points_in_box_color, self.rot_axis,
-                     self.center_mode, self.mode)
+                     self.center_mode, self.mode, z_offset)
 
     def add_seg_mask(self, seg_mask_colors):
         """Add segmentation mask to visualizer via per-point colorization.
@@ -639,36 +635,66 @@ class Visualizer(object):
 # dtype = np.dtype('B')
 
 # nuScenes
-numpy_data = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_points.npy")
-pred_bboxes = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_pred.npy")
-gt_bboxes = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_gt.npy")
+# numpy_data = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_points.npy")
+# pred_bboxes = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_pred.npy")
+# gt_bboxes = np.load("/Users/yangxiaorui/Downloads/n015-2018-07-11-11-54-16+0800__LIDAR_TOP__1531281444400092_gt.npy")
 
-# Qualcomm
-numpy_data = np.load("/Users/yangxiaorui/Downloads/frame_6000_points.npy")
-pred_bboxes = np.load("/Users/yangxiaorui/Downloads/frame_6000_pred.npy")
-gt_bboxes = np.load("/Users/yangxiaorui/Downloads/frame_6000_gt.npy")
+# # Qualcomm
+# numpy_data = np.load("/Users/yangxiaorui/Downloads/frame_6000_points.npy")
+# pred_bboxes = np.load("/Users/yangxiaorui/Downloads/frame_6000_pred_waymo_pp.npy")
+# gt_bboxes = np.load("/Users/yangxiaorui/Downloads/frame_0_gt.npy")
 
+frame_id = 80
+import json
+numpy_data = np.load(f"/Users/yangxiaorui/Downloads/interval_10/frame_{6000 + frame_id}/frame_{6000 + frame_id}_points.npy")
+gt_bboxes = np.load(f"/Users/yangxiaorui/Downloads/interval_10/frame_{6000 + frame_id}/frame_{6000 + frame_id}_gt.npy")
+# jj = json.load(open(f"/Users/yangxiaorui/Downloads/interval_10/frame_{6000 + frame_id}/frame_{6000 + frame_id}_pred.json", "r"))
+# pred_bboxes = np.load(f"/Users/yangxiaorui/Downloads/interval_10/frame_{6000 + frame_id}/frame_{6000 + frame_id}_pred.npy")
+jj = json.load(open(f"/Users/yangxiaorui/Downloads/frame_{6000 + frame_id}_pred.json", "r"))
+pred_bboxes = np.load(f"/Users/yangxiaorui/Downloads/frame_{6000 + frame_id}_pred.npy")
+cp_preds = [int(l.strip()[-13:-9]) - 6000 for l in open("/Users/yangxiaorui/Downloads/cp_pred.txt", "r").readlines()]
+print(cp_preds)
+
+idx = cp_preds.index(frame_id)
+nms_res = [l.strip() for l in open("/Users/yangxiaorui/Downloads/nms_result.txt", "r").readlines()]
+nms_result = np.array([int(a) for a in nms_res[idx].split(',')], dtype=np.int8)
+score_thres = 0.3
+valid_idxs = []
+for i in range(len(jj['frames'][0]['items'])):
+    if jj['frames'][0]['items'][i]['score'] < score_thres:
+        continue
+    # if i not in nms_result:
+    #     continue
+    valid_idxs.append(i)
+print(nms_result)
+valid_idxs = np.array(valid_idxs, dtype=np.int8)
+nms_valid_idxs = valid_idxs[nms_result]
 vis = Visualizer(numpy_data)
-pred_labels = None
+# print(pred_bboxes[valid_idxs, :])
+print(valid_idxs)
+print(nms_result.sort())
+print(nms_result)
+
+# pred_labels = None
 if pred_bboxes is not None:
-    if pred_labels is None:
-        vis.add_bboxes(bbox3d=pred_bboxes)
-    else:
-        palette = np.random.randint(
-            0, 255, size=(pred_labels.max() + 1, 3)) / 256
-        labelDict = {}
-        for j in range(len(pred_labels)):
-            i = int(pred_labels[j].numpy())
-            if labelDict.get(i) is None:
-                labelDict[i] = []
-            labelDict[i].append(pred_bboxes[j])
-        for i in labelDict:
-            vis.add_bboxes(
-                bbox3d=np.array(labelDict[i]),
-                bbox_color=palette[i],
-                points_in_box_color=palette[i])
+    # if pred_labels is None:
+    vis.add_bboxes(bbox3d=pred_bboxes[nms_valid_idxs, :])
+    # else:
+    #     palette = np.random.randint(
+    #         0, 255, size=(pred_labels.max() + 1, 3)) / 256
+    #     labelDict = {}
+    #     for j in range(len(pred_labels)):
+    #         i = int(pred_labels[j].numpy())
+    #         if labelDict.get(i) is None:
+    #             labelDict[i] = []
+    #         labelDict[i].append(pred_bboxes[j])
+    #     for i in labelDict:
+    #         vis.add_bboxes(
+    #             bbox3d=np.array(labelDict[i]),
+    #             bbox_color=palette[i],
+    #             points_in_box_color=palette[i])
 
 if gt_bboxes is not None:
-    vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
+    vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1), z_offset=1)
 show_path = None
 vis.show(show_path)
