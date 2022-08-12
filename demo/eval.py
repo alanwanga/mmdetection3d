@@ -259,13 +259,20 @@ def get_ious(gt_boxes, predicted_box):
     return [predicted_box.get_iou(x) for x in gt_boxes]
 
 
-def recall_precision(all_gts, all_predictions, iou_threshold):
+def recall_precision(all_gts, all_predictions, iou_threshold, dist_range):
     all_gts = group_by_key(all_gts, 'category')
     all_predictions = group_by_key(all_predictions, "category")
-    for cat in [0, 1, 3]:
-        gt = all_gts[mapping[cat]]
+    #dist_ranges = [(0, 30), (30, 50), (50, 70), (70, 150)]
+    for cat in [0]:
+        cat_gt = all_gts[mapping[cat]]
+        gt = []
+        for j in range(len(cat_gt)):
+            if cat_gt[j]['translation'][0] > dist_range[0] - 3 and cat_gt[j]['translation'][0] < dist_range[1] + 3:
+                gt.append(cat_gt[j])
+        #import ipdb; ipdb.set_trace()
         num_gts = len(gt)
         if num_gts == 0:
+            print("empty gt")
             #print(f"{mapping[cat]} no gt")
             continue
         image_gts = group_by_key(gt, "sample_token")
@@ -277,6 +284,7 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
         predictions = all_predictions[cat]
         predictions = sorted(predictions, key=lambda x: x["score"], reverse=True)
         if len(predictions) == 0:
+            print("empty pred")
             #print(f"{mapping[cat]} no predictions")
             continue
         # go down dets and mark TPs and FPs
@@ -286,6 +294,8 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
         #import ipdb
         #ipdb.set_trace()
         for prediction_index, prediction in enumerate(predictions):
+            if prediction['translation'][0] < dist_range[0] - 3 or prediction['translation'][0] > dist_range[1] + 3:
+                continue
             predicted_box = Box3D(**prediction)
 
             sample_token = prediction["sample_token"]
@@ -330,7 +340,7 @@ def recall_precision(all_gts, all_predictions, iou_threshold):
 
         ap = get_ap(recalls, precisions)
         #print(f"Cat: {mapping[cat]}, prediction {len(predictions)} gt {len(gt)}")
-        print(f"{mapping[cat]},  {iou_threshold:.2f}, {precisions[-1]:.4f}, {recalls[-1]:.4f}, {ap:.4f}")
+        print(f"{mapping[cat]}, {precisions[-1]:.4f}, {recalls[-1]:.4f}, {ap:.4f}")
     # return recalls, precisions, ap
 
 
@@ -415,7 +425,7 @@ def build_scene(file: str, score_thres=0.0, index=None, frameId=None, cats=None,
                 if cats is not None and o['category'] not in cats:
                     continue
                 if nms_res is not None and new_idx not in nms_res:
-                    print(f"{frame['frameId']} discard {o_idx}")
+                    #print(f"{frame['frameId']} discard {o_idx}")
                     continue
                 item = {}
                 if frameId is not None:
@@ -445,8 +455,9 @@ def parse_args():
     # parser.add_argument('--pred_file', type=str, default='/Users/yangxiaorui/Downloads/frame_6000_pred.json')
 
 
-    parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150_new.json')
-    parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/preds.txt')
+#    parser.add_argument('--gt_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/20220704_Qualcomm_package/annotation/anno_frame_6000_6150_new.json')
+    parser.add_argument('--gt_file', type=str, default='/mnt/ml/qualcomm/results/cp_sn_ft/anno_frame_6000_6150_new.json')
+    parser.add_argument('--pred_file', type=str, default='/mnt/ml/qualcomm/results/cp_sn_ft/pred_npy_sort.txt')
     #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/waymo_pp/waymo_pp.txt')
     #parser.add_argument('--pred_file', type=str, default='/home/ssm-user/xiaorui/lidar/qualcomm/pred/cp/cp_pred.txt')
     args = parser.parse_args()
@@ -461,7 +472,7 @@ if __name__ == '__main__':
     #gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus', 'Trailer', 'Motorcycle'])
     gt = build_scene(gt_file, cats=['Car', 'Truck', 'Bus'])
     pred_file = args.pred_file
-    nms_res = [l.strip() for l in open("/home/ssm-user/xiaorui/lidar/qualcomm/pred/cp/nms_result.txt", "r").readlines()]
+    nms_res = [l.strip() for l in open("/mnt/ml/qualcomm/results/cp_sn_ft/nms_res.txt", "r").readlines()]
 
     if pred_file.endswith(".txt"):
         preds = []
@@ -476,10 +487,13 @@ if __name__ == '__main__':
             preds.extend(build_scene(pred, score_thres=0.3, frameId=int(os.path.basename(pred)[6:10]) - 6000, cats=[0,1,2,3,6], nms_res=nms_result))
     else:
         preds = build_scene(pred_file, score_thres=0.3, frameId=int(os.path.basename(pred_file)[6:10]) - 6000, cats=[0,1,2,3,6])
+    dist_ranges = [(0, 30), (30, 50), (50, 70), (70, 150)]
     for iou_threshold in np.arange(0.1, 0.91, 0.1):
         iou_threshold = round(iou_threshold, 2)
         # for cat in ["Car", "Truck", "Trailer", "Bus", "Motorcycle"]
         # recalls, precisions, ap = recall_precision(gt, preds, iou_threshold)
-        recall_precision(gt, preds, iou_threshold)
+        for dist_range in dist_ranges:
+            print(f"{dist_range[0]}m ~ {dist_range[1]}m, iou {iou_threshold:.2f}")
+            recall_precision(gt, preds, iou_threshold, dist_range)
 
         
